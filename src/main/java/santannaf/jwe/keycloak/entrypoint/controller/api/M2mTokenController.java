@@ -3,6 +3,7 @@ package santannaf.jwe.keycloak.entrypoint.controller.api;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import santannaf.jwe.keycloak.entities.EncryptedToken;
@@ -13,6 +14,7 @@ import santannaf.jwe.keycloak.usecases.IssueEncryptedM2mTokenUseCase;
 import santannaf.jwe.keycloak.usecases.ValidateEncryptedM2mTokenUseCase;
 
 @RestController
+@RequestMapping("/oauth/m2m")
 public class M2mTokenController {
 
     private final IssueEncryptedM2mTokenUseCase issueUseCase;
@@ -30,7 +32,7 @@ public class M2mTokenController {
         return ResponseEntity.ok(new IssueTokenResponse(token.jwe(), token.tokenType()));
     }
 
-    @PostMapping("/oauth/m2m/login")
+    @PostMapping("/login")
     public ResponseEntity<ValidationResponse> validate(@RequestBody(required = false) ValidateTokenRequest request) {
         if (request == null || request.token() == null || request.token().isBlank()) {
             throw new IllegalArgumentException("token is required");

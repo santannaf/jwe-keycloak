@@ -41,7 +41,7 @@ class IssueTokenIntegrationTest {
 
     @Test
     void returnsEncryptedTokenOnSuccess() throws Exception {
-        mockMvc.perform(post("/token"))
+        mockMvc.perform(post("/oauth/m2m/token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.jwe").isNotEmpty())
                 .andExpect(jsonPath("$.token_type").value("Bearer"));
@@ -53,7 +53,7 @@ class IssueTokenIntegrationTest {
             throw new KeycloakAuthenticationException("bad client");
         };
 
-        mockMvc.perform(post("/token"))
+        mockMvc.perform(post("/oauth/m2m/token"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -63,7 +63,7 @@ class IssueTokenIntegrationTest {
             throw new KeycloakUnavailableException("down");
         };
 
-        mockMvc.perform(post("/token"))
+        mockMvc.perform(post("/oauth/m2m/token"))
                 .andExpect(status().isBadGateway());
     }
 

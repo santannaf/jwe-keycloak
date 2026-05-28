@@ -18,7 +18,7 @@ No secret is hardcoded in Java. All sensitive values come from environment varia
 
 | Method  | Path               | Purpose                                                                                                              |
 |---------|--------------------|----------------------------------------------------------------------------------------------------------------------|
-| `POST`  | `/token`           | Issue a Keycloak M2M access token encrypted as a JWE (RSA-OAEP-256 + A256GCM).                                       |
+| `POST`  | `/oauth/m2m/token` | Issue a Keycloak M2M access token encrypted as a JWE (RSA-OAEP-256 + A256GCM).                                       |
 | `POST`  | `/oauth/m2m/login` | Receive a JWE, decrypt it, validate the inner Keycloak token. Prints `Token is ok` on the server console when valid. |
 | `POST`  | `/oauth/login`     | Authenticate a user (password grant); return the access and refresh tokens encrypted as JWEs.                        |
 
@@ -72,7 +72,7 @@ export KEYCLOAK_LOGIN_CLIENT_SECRET=<your_client_secret>
 
 ```bash
 # 1) Issue an encrypted (JWE) M2M token
-JWE=$(curl -s -X POST http://localhost:8081/token | jq -r .access_token)
+JWE=$(curl -s -X POST http://localhost:8081/oauth/m2m/token | jq -r .access_token)
 echo "$JWE"
 
 # 2) Validate it — the server console prints: Token is ok
