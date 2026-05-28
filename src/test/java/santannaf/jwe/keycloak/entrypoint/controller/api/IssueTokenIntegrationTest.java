@@ -43,7 +43,7 @@ class IssueTokenIntegrationTest {
     void returnsEncryptedTokenOnSuccess() throws Exception {
         mockMvc.perform(post("/oauth/m2m/token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.jwe").isNotEmpty())
+                .andExpect(jsonPath("$.access_token").isNotEmpty())
                 .andExpect(jsonPath("$.token_type").value("Bearer"));
     }
 
