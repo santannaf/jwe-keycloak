@@ -1,0 +1,458 @@
+{
+  "info": {
+    "name": "jwe-keycloak",
+    "description": "Endpoints do backend jwe-keycloak e chamadas diretas ao Keycloak do realm `demo`.\n\n**Antes:** `docker compose up -d` e o app rodando (veja o README).\n\n**Portas:** `baseUrl` e `keycloakUrl` apontam para 8181 e 8180, as portas desta máquina (via `docker-compose.override.yml`). Sem o override, o padrão do README é 8081 e 8080; ajuste as variáveis da collection.\n\n**Ordem:** rode a collection inteira no Runner, ou rode \"Emitir token M2M (JWE)\" antes de \"Validar JWE M2M\", e \"Login\" antes de \"Access token do usuário no endpoint M2M\". Os tokens ficam nas variáveis `m2mJwe` e `userAccessJwe`.\n\n**Keycloak (direto):** as requests de token precisam dos client secrets, que só existem em `keycloak/realm-export.json` (fora do git). Preencha `m2mClientSecret` e `loginClientSecret` no *Current value* das variáveis, que fica só local:\n\n```\njq -r '.clients[] | select(.clientId==\"m2m-client\") | .secret' keycloak/realm-export.json\njq -r '.clients[] | select(.clientId==\"login-client\") | .secret' keycloak/realm-export.json\n```\n\nSem os secrets, essas duas requests são puladas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "M2M (client_credentials)",
+      "description": "O backend pede um token ao Keycloak com o `m2m-client` e devolve o access token cifrado como JWE (RSA-OAEP-256 + A256GCM).\n\nA chave RSA do JWE é gerada a cada start do app: se o app reiniciar, os JWEs emitidos antes passam a dar 401.",
+      "item": [
+        {
+          "name": "Emitir token M2M (JWE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('access_token é um JWE compacto (5 partes)', () => pm.expect(body.access_token.split('.')).to.have.lengthOf(5));",
+                  "pm.test('token_type é Bearer', () => pm.expect(body.token_type).to.eql('Bearer'));",
+                  "",
+                  "if (body.access_token) pm.collectionVariables.set('m2mJwe', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth/m2m/token",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "m2m", "token"]
+            },
+            "description": "Resposta: `{ \"access_token\": \"<JWE>\", \"token_type\": \"Bearer\" }`. O JWE fica salvo em `m2mJwe`.\n\nErros: 401 se o Keycloak rejeitar o client; 502 se o Keycloak estiver fora."
+          },
+          "response": []
+        },
+        {
+          "name": "Validar JWE M2M",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status é ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{m2mJwe}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth/m2m/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "m2m", "login"]
+            },
+            "description": "Decifra o JWE de `m2mJwe` e valida o JWT de dentro: assinatura RS256 contra o JWKS do realm, `iss` exato e `exp`.\n\nVálido: 200 `{ \"status\": \"ok\" }`, e o console do app imprime `Token is ok`. Qualquer falha: 401 sem corpo.\n\nRode \"Emitir token M2M (JWE)\" antes."
+          },
+          "response": []
+        },
+        {
+          "name": "Validar JWE inválido → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('sem corpo, para não revelar a etapa que falhou', () => pm.expect(pm.response.text()).to.be.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"abc.def.ghi.jkl.mno\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth/m2m/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "m2m", "login"]
+            },
+            "description": "Um valor que não é um JWE decifrável cai no mesmo 401 sem corpo de um token interno inválido."
+          },
+          "response": []
+        },
+        {
+          "name": "Validar sem token → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('mensagem de erro', () => pm.expect(pm.response.json().error).to.eql('token is required'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth/m2m/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "m2m", "login"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Login de usuário (password grant)",
+      "description": "O backend faz o password grant com o `login-client` e devolve access e refresh tokens cifrados como JWE. Usuário do realm: `demo` / `demo`.",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('access_token e refresh_token são JWE (5 partes)', () => {",
+                  "    pm.expect(body.access_token.split('.')).to.have.lengthOf(5);",
+                  "    pm.expect(body.refresh_token.split('.')).to.have.lengthOf(5);",
+                  "});",
+                  "pm.test('token_type é Bearer', () => pm.expect(body.token_type).to.eql('Bearer'));",
+                  "pm.test('expires_in é número', () => pm.expect(body.expires_in).to.be.a('number'));",
+                  "",
+                  "if (body.access_token) pm.collectionVariables.set('userAccessJwe', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "login"]
+            },
+            "description": "Resposta: `access_token` e `refresh_token` como JWE, mais `token_type` e `expires_in`. O access token fica salvo em `userAccessJwe`.\n\nErros: 401 com credenciais inválidas; 400 sem usuário ou senha; 502 se o Keycloak estiver fora."
+          },
+          "response": []
+        },
+        {
+          "name": "Access token do usuário no endpoint M2M (aceito hoje)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{userAccessJwe}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth/m2m/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "m2m", "login"]
+            },
+            "description": "Mostra uma lacuna atual: a validação do `/oauth/m2m/login` não checa `aud` nem `azp`, então o access token de um usuário passa como se fosse M2M e volta 200. Se a validação passar a exigir o `m2m-client`, o esperado aqui é 401.\n\nRode \"Login\" antes."
+          },
+          "response": []
+        },
+        {
+          "name": "Login com senha errada → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('mensagem de erro', () => pm.expect(pm.response.json().error).to.eql('Invalid username or password'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"senha-errada\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login sem senha → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('mensagem de erro', () => pm.expect(pm.response.json().error).to.eql('username and password are required'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["oauth", "login"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Keycloak (direto)",
+      "description": "Chamadas direto ao Keycloak, sem passar pelo backend: servem para ver o JWT sem cifrar e conferir o issuer e as chaves. As requests de token precisam dos client secrets (veja a descrição da collection); sem eles, são puladas.",
+      "item": [
+        {
+          "name": "OIDC discovery",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('issuer é keycloakUrl/realms/realm', () => {",
+                  "    const expected = pm.variables.get('keycloakUrl') + '/realms/' + pm.variables.get('realm');",
+                  "    pm.expect(pm.response.json().issuer).to.eql(expected);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/{{realm}}/.well-known/openid-configuration",
+              "host": ["{{keycloakUrl}}"],
+              "path": ["realms", "{{realm}}", ".well-known", "openid-configuration"]
+            },
+            "description": "O `issuer` precisa ser igual ao `KEYCLOAK_BASE_URL` do app + `/realms/demo`. Se não for, o `/oauth/m2m/login` devolve 401 para todo token."
+          },
+          "response": []
+        },
+        {
+          "name": "JWKS (chaves públicas do realm)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('tem chave RS256 de assinatura', () => {",
+                  "    const keys = pm.response.json().keys;",
+                  "    pm.expect(keys.some(k => k.alg === 'RS256' && k.use === 'sig')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/certs",
+              "host": ["{{keycloakUrl}}"],
+              "path": ["realms", "{{realm}}", "protocol", "openid-connect", "certs"]
+            },
+            "description": "Chaves que o backend usa para checar a assinatura do token de dentro do JWE."
+          },
+          "response": []
+        },
+        {
+          "name": "Token client_credentials (JWT sem cifrar)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('m2mClientSecret')) {",
+                  "    console.warn('m2mClientSecret vazio: preencha a variável (veja a descrição da collection). Request pulada.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('azp é o m2m-client', () => {",
+                  "    const token = pm.response.json().access_token;",
+                  "    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));",
+                  "    console.log('claims', claims);",
+                  "    pm.expect(claims.azp).to.eql(pm.variables.get('m2mClientId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "client_credentials", "type": "text" },
+                { "key": "client_id", "value": "{{m2mClientId}}", "type": "text" },
+                { "key": "client_secret", "value": "{{m2mClientSecret}}", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloakUrl}}"],
+              "path": ["realms", "{{realm}}", "protocol", "openid-connect", "token"]
+            },
+            "description": "O mesmo pedido que o backend faz em `/oauth/m2m/token`, mas devolvendo o JWT sem cifrar. Os claims vão para o console do Postman."
+          },
+          "response": []
+        },
+        {
+          "name": "Token password (JWT sem cifrar)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('loginClientSecret')) {",
+                  "    console.warn('loginClientSecret vazio: preencha a variável (veja a descrição da collection). Request pulada.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('preferred_username é o usuário', () => {",
+                  "    const token = pm.response.json().access_token;",
+                  "    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));",
+                  "    console.log('claims', claims);",
+                  "    pm.expect(claims.preferred_username).to.eql(pm.variables.get('username'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "password", "type": "text" },
+                { "key": "client_id", "value": "{{loginClientId}}", "type": "text" },
+                { "key": "client_secret", "value": "{{loginClientSecret}}", "type": "text" },
+                { "key": "username", "value": "{{username}}", "type": "text" },
+                { "key": "password", "value": "{{password}}", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloakUrl}}"],
+              "path": ["realms", "{{realm}}", "protocol", "openid-connect", "token"]
+            },
+            "description": "O mesmo pedido que o backend faz em `/oauth/login`, mas devolvendo access e refresh tokens sem cifrar. Os claims vão para o console do Postman."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8181", "type": "string", "description": "Backend Spring. 8181 nesta máquina (override); o padrão do README é 8081." },
+    { "key": "keycloakUrl", "value": "http://localhost:8180", "type": "string", "description": "Keycloak. 8180 nesta máquina (override); o padrão do README é 8080." },
+    { "key": "realm", "value": "demo", "type": "string" },
+    { "key": "username", "value": "demo", "type": "string" },
+    { "key": "password", "value": "demo", "type": "string" },
+    { "key": "m2mClientId", "value": "m2m-client", "type": "string" },
+    { "key": "m2mClientSecret", "value": "", "type": "string", "description": "Só para \"Keycloak (direto)\". Preencha no Current value (veja a descrição da collection)." },
+    { "key": "loginClientId", "value": "login-client", "type": "string" },
+    { "key": "loginClientSecret", "value": "", "type": "string", "description": "Só para \"Keycloak (direto)\". Preencha no Current value (veja a descrição da collection)." },
+    { "key": "m2mJwe", "value": "", "type": "string", "description": "Preenchida por \"Emitir token M2M (JWE)\"." },
+    { "key": "userAccessJwe", "value": "", "type": "string", "description": "Preenchida por \"Login\"." }
+  ]
+}
