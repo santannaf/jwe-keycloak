@@ -1,8 +1,8 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '4.0.6'
+    id 'org.springframework.boot' version '4.1.2'
     id 'io.spring.dependency-management' version '1.1.7'
-    id 'org.graalvm.buildtools.native' version '0.11.5'
+    id 'org.graalvm.buildtools.native' version '1.1.14'
 }
 
 group = 'santannaf.jwe.keycloak'
@@ -22,7 +22,7 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-restclient'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-    implementation 'com.nimbusds:nimbus-jose-jwt:10.9'
+    implementation 'com.nimbusds:nimbus-jose-jwt:10.10'
     implementation 'jakarta.inject:jakarta.inject-api:2.0.1'
     testImplementation 'org.springframework.boot:spring-boot-starter-restclient-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
