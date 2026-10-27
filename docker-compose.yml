@@ -56,7 +56,7 @@ services:
 
   pgadmin:
     container_name: jwe-keycloak-pgadmin
-    image: dpage/pgadmin4:8.12
+    image: dpage/pgadmin4:9.18
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@local.dev}
