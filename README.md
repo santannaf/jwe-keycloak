@@ -88,6 +88,26 @@ curl -s -X POST http://localhost:8081/oauth/login \
   -d '{"username":"demo","password":"demo"}'
 ```
 
+## Roles in tokens
+
+Both clients have *Full scope allowed* turned off, with no role scope mappings: Keycloak 26.8 deprecated the
+switch and logs a warning on every token issued while it is on. Their tokens therefore carry no roles
+(`realm_access`, `resource_access`) and no `aud`. Nothing here reads them: the app validates the signature, `iss`
+and `exp`, and the Postman tests check `azp` and `preferred_username`. To give a client a role, map it under
+*Clients → client → Client scopes → `<client>-dedicated` → Scope*.
+
+For a fresh import, set `"fullScopeAllowed": false` on both clients in `keycloak/realm-export.json`. The import
+skips a realm that already exists; there, turn the switch off with:
+
+```bash
+kcadm() { docker exec jwe-keycloak /opt/keycloak/bin/kcadm.sh "$@"; }
+kcadm config credentials --server http://localhost:8080 --realm master --user admin --password admin
+for c in m2m-client login-client; do
+  id=$(kcadm get clients -r demo -q clientId=$c --fields id --format csv --noquotes)
+  kcadm update "clients/$id" -r demo -s fullScopeAllowed=false
+done
+```
+
 ## Login theme
 
 `keycloak/themes/jwe-keycloak/login` is a custom Keycloak login theme. It extends the built-in `keycloak.v2` theme
