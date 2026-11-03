@@ -27,7 +27,7 @@ services:
     build:
       context: ./keycloak
       args:
-        KEYCLOAK_VERSION: ${KEYCLOAK_VERSION:-26.1}
+        KEYCLOAK_VERSION: ${KEYCLOAK_VERSION:-26.8}
     command: ["start", "--optimized", "--import-realm"]
     restart: unless-stopped
     depends_on:
@@ -48,9 +48,11 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       # Theme caching off so edits under keycloak/themes show up on reload, without restarting Keycloak
-      KC_SPI_THEME_STATIC_MAX_AGE: "-1"
-      KC_SPI_THEME_CACHE_THEMES: "false"
-      KC_SPI_THEME_CACHE_TEMPLATES: "false"
+      KC_SPI_THEME__STATIC_MAX_AGE: "-1"
+      KC_SPI_THEME__CACHE_THEMES: "false"
+      KC_SPI_THEME__CACHE_TEMPLATES: "false"
+      # Single node, no load balancer: no route suffix in AUTH_SESSION_ID (deprecated in 26.8, warns at startup otherwise)
+      KC_SPI_STICKY_SESSION_ENCODER__INFINISPAN__SHOULD_ATTACH_ROUTE: "false"
     ports:
       - "8080:8080"
     volumes:

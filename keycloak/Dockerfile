@@ -1,7 +1,7 @@
 # Custom Keycloak image backed by PostgreSQL, built in "optimized" mode.
 # Pattern adapted from https://github.com/ozbillwang/keycloak-compose
 # Docs: https://www.keycloak.org/server/containers
-ARG KEYCLOAK_VERSION=26.1
+ARG KEYCLOAK_VERSION=26.8
 
 # --- Build stage: bake build-time options so the runtime can use --optimized ---
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS builder
