@@ -13,6 +13,8 @@ No secret is hardcoded in Java. All sensitive values come from environment varia
   optimized image (`keycloak/Dockerfile`). The `demo` realm is auto-imported.
 - **PostgreSQL** (`localhost:5432`) persists Keycloak data; **pgAdmin** (`localhost:5050`) is an optional DB UI.
 - **The Spring app** runs on `http://localhost:8081` (so it does not clash with Keycloak's `8080`).
+- **Login theme** `jwe-keycloak` (`keycloak/themes/jwe-keycloak/login`) restyles Keycloak's sign-in page — see
+  [Login theme](#login-theme).
 
 ## Endpoints
 
@@ -85,6 +87,60 @@ curl -s -X POST http://localhost:8081/oauth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"demo","password":"demo"}'
 ```
+
+## Login theme
+
+`keycloak/themes/jwe-keycloak/login` is a custom Keycloak login theme. It extends the built-in `keycloak.v2` theme
+and replaces only the username/password page (`login.ftl`): a split layout with an animated, color-coded JWE
+(`RSA-OAEP-256 · A256GCM`) next to the sign-in form. Every other page (password reset, required actions, errors)
+keeps the `keycloak.v2` look.
+
+| Path                             | Purpose                                                                                             |
+|----------------------------------|-----------------------------------------------------------------------------------------------------|
+| `login.ftl`                      | FreeMarker template of the sign-in page.                                                            |
+| `resources/css/login.css`        | Styles: light and dark (`prefers-color-scheme`), responsive down to phone width.                    |
+| `resources/js/login.js`          | Show/hide password, Caps Lock hint, busy submit button, token animation (off under reduced motion). |
+| `messages/messages_*.properties` | Theme texts in `pt-BR` and `en`; Keycloak built-in messages cover the rest.                         |
+| `resources/fonts/`               | Instrument Serif and JetBrains Mono (OFL, licenses included), served by Keycloak itself.            |
+
+The fonts are self-hosted, so the sign-in page makes no third-party requests.
+
+### Wiring
+
+`docker-compose.yml` mounts the theme read-only into `/opt/keycloak/themes/jwe-keycloak` and turns theme caching
+off (`KC_SPI_THEME__*`), so edits show up on a browser reload without restarting Keycloak.
+
+### Enabling it on a realm
+
+A theme applies only to the realms that select it. For a fresh import, set these top-level fields in
+`keycloak/realm-export.json` (the last three make `pt-BR` the default language):
+
+```json
+"loginTheme": "jwe-keycloak",
+"internationalizationEnabled": true,
+"supportedLocales": ["pt-BR", "en"],
+"defaultLocale": "pt-BR"
+```
+
+The import runs only when the realm does not exist yet. On a running realm, pick the theme under
+*Realm settings → Themes → Login theme* in the admin console, or:
+
+```bash
+docker exec jwe-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+  --server http://localhost:8080 --realm master --user admin --password admin
+docker exec jwe-keycloak /opt/keycloak/bin/kcadm.sh update realms/demo -s loginTheme=jwe-keycloak
+```
+
+### Seeing it
+
+- Open `http://localhost:8080/realms/demo/account` and sign in with `demo` / `demo`. With an existing session
+  Keycloak skips the page: sign out or use a private window.
+- The page follows the browser's language when it is a supported locale, otherwise the realm default. The footer
+  links switch languages.
+- `/oauth/login` uses the password grant and never renders this page: the theme shows up only in browser flows
+  (the account console, or Authorization Code + PKCE).
+- The account console requires the realm's default roles. Users imported from `realm-export.json` only get them
+  when listed: `"realmRoles": ["default-roles-demo"]`.
 
 ## Tests
 
